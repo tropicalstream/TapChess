@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:aapt="http://schemas.android.com/aapt"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+
+    <path android:pathData="M0,0h108v108h-108z">
+        <aapt:attr name="android:fillColor">
+            <gradient
+                android:type="radial"
+                android:centerX="54" android:centerY="46" android:gradientRadius="74">
+                <item android:offset="0.0" android:color="#FF243056" />
+                <item android:offset="0.55" android:color="#FF121A34" />
+                <item android:offset="1.0" android:color="#FF05060F" />
+            </gradient>
+        </aapt:attr>
+    </path>
+
+    <!-- Checkerboard hint band -->
+    <path android:fillColor="#22FFFFFF" android:pathData="M24,84h12v12h-12z M48,84h12v12h-12z M72,84h12v12h-12z M36,72h12v12h-12z M60,72h12v12h-12z" />
+</vector>
