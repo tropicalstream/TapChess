@@ -15,6 +15,9 @@ import com.tapchess.engine.file
 import com.tapchess.engine.rank
 import com.tapchess.engine.sqOf
 import kotlin.math.abs
+import kotlin.math.atan2
+import kotlin.math.cos
+import kotlin.math.hypot
 import kotlin.math.min
 import kotlin.math.sin
 
@@ -52,6 +55,7 @@ class Renderer(private val engine: GameEngine, private val store: SettingsStore)
         else {
             drawBoard(c)
             drawPieces(c)
+            drawOppTrail(c)
             drawHud(c)
             drawParticles(c)
             when (engine.state) {
@@ -130,6 +134,49 @@ class Renderer(private val engine: GameEngine, private val store: SettingsStore)
         stroke.strokeWidth = 3f
         stroke.color = Color.argb(pulse, 255, 255, 255)
         c.drawRoundRect(rf, 6f, 6f, stroke)
+
+        // Dwell-to-commit ring: fills over 2s while the cursor rests on a legal
+        // target, then locks green — a tap only moves once it's armed.
+        if (engine.selected >= 0 && engine.cursor in engine.targets) {
+            val ccx = cx + SQ / 2; val ccy = cy + SQ / 2
+            rf.set(ccx - SQ * 0.46f, ccy - SQ * 0.46f, ccx + SQ * 0.46f, ccy + SQ * 0.46f)
+            stroke.strokeWidth = 4f
+            if (engine.moveArmed) {
+                val pz = (200 + 55 * sin(engine.time * 6f)).toInt().coerceIn(120, 255)
+                stroke.color = Color.argb(pz, 120, 240, 150)
+                c.drawArc(rf, -90f, 360f, false, stroke)
+            } else {
+                stroke.color = Color.argb(90, 255, 220, 140)
+                c.drawArc(rf, -90f, 360f, false, stroke)
+                stroke.color = Color.argb(230, 255, 210, 120)
+                c.drawArc(rf, -90f, 360f * engine.dwellProgress, false, stroke)
+            }
+        }
+    }
+
+    private fun drawOppTrail(c: Canvas) {
+        if (engine.oppFrom < 0 || engine.oppTo < 0) return
+        val x1 = engine.sqCenterX(engine.oppFrom); val y1 = engine.sqCenterY(engine.oppFrom)
+        val x2 = engine.sqCenterX(engine.oppTo); val y2 = engine.sqCenterY(engine.oppTo)
+        val dx = x2 - x1; val dy = y2 - y1
+        val len = hypot(dx, dy)
+        val n = (len / 13f).toInt().coerceAtLeast(2)
+        fill.shader = null
+        for (i in 1 until n) {
+            val t = i.toFloat() / n
+            val tw = sin(engine.time * 4f - i * 0.5f) * 0.5f + 0.5f
+            fill.color = Color.argb((110 + 120 * tw).toInt().coerceIn(60, 255), 255, 158, 96)
+            c.drawCircle(x1 + dx * t, y1 + dy * t, 2.4f + tw * 1.4f, fill)
+        }
+        val ang = atan2(dy, dx)
+        val ah = 9f
+        val p = piecePath; p.reset()
+        p.moveTo(x2, y2)
+        p.lineTo(x2 - ah * cos(ang - 0.42f), y2 - ah * sin(ang - 0.42f))
+        p.lineTo(x2 - ah * cos(ang + 0.42f), y2 - ah * sin(ang + 0.42f))
+        p.close()
+        fill.color = Color.argb(235, 255, 172, 104)
+        c.drawPath(p, fill)
     }
 
     private fun highlightSquare(c: Canvas, sqi: Int, color: Int) {
@@ -348,15 +395,19 @@ class Renderer(private val engine: GameEngine, private val store: SettingsStore)
         val msg = engine.invalidMsg ?: return
         val a = (engine.invalidT / 2.6f).coerceIn(0f, 1f)
         val alpha = (min(1f, a * 3f) * 255).toInt()
+        val hint = engine.invalidIsHint
         rf.set(150f, 436f, 490f, 466f)
         fill.shader = null
-        fill.color = Color.argb((alpha * 0.85f).toInt(), 60, 20, 24)
+        // Amber for a "wait for the dwell" hint, red for an illegal move.
+        fill.color = if (hint) Color.argb((alpha * 0.85f).toInt(), 54, 44, 16)
+        else Color.argb((alpha * 0.85f).toInt(), 60, 20, 24)
         c.drawRoundRect(rf, 12f, 12f, fill)
         stroke.strokeWidth = 2f
-        stroke.color = Color.argb((alpha * 0.9f).toInt(), 255, 110, 110)
+        stroke.color = if (hint) Color.argb((alpha * 0.9f).toInt(), 255, 200, 110)
+        else Color.argb((alpha * 0.9f).toInt(), 255, 110, 110)
         c.drawRoundRect(rf, 12f, 12f, stroke)
         textP.alpha = 255
-        text(c, msg, 320f, 456f, 12.5f, Color.argb(alpha, 255, 220, 210))
+        text(c, msg, 320f, 456f, 12.5f, if (hint) Color.argb(alpha, 255, 230, 180) else Color.argb(alpha, 255, 220, 210))
     }
 
     private fun drawPromo(c: Canvas) {

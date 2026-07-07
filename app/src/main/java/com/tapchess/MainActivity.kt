@@ -135,8 +135,6 @@ class MainActivity : Activity(), GameHost {
         } else engine.click()
     }
 
-    private fun continuousMode() = engine.settingsOpen
-
     override fun dispatchTouchEvent(ev: MotionEvent): Boolean {
         val name = ev.device?.name ?: ""
         if (name.contains("cyttsp6", ignoreCase = true)) return true
@@ -157,7 +155,6 @@ class MainActivity : Activity(), GameHost {
                         if (store.flipHorizontal) dx = -dx
                         if (store.flipVertical) dy = -dy
                         sumX += dx; sumY += dy
-                        if (continuousMode()) engine.navSwipe(dx, dy)
                     }
                 }
             }
@@ -165,19 +162,19 @@ class MainActivity : Activity(), GameHost {
                 if (touchActive) resolveGesture(SystemClock.uptimeMillis())
                 touchActive = false
             }
-            MotionEvent.ACTION_CANCEL -> { engine.endSwipe(); touchActive = false }
+            MotionEvent.ACTION_CANCEL -> touchActive = false
         }
         return true
     }
 
+    /**
+     * Every swipe resolves on finger-up into a single discrete direction, in
+     * every context (settings included). One gesture = one step: no continuous
+     * accumulation, no latch/re-arm — the fix for laggy, finicky navigation.
+     */
     private fun resolveGesture(now: Long) {
         val dist = sqrt(sumX * sumX + sumY * sumY)
-        val threshold = max(55f, 0.11f * resources.displayMetrics.widthPixels) / store.swipeSens
-        if (continuousMode()) {
-            engine.endSwipe()
-            if (dist < threshold * 0.6f && now - touchStartT <= 320) handleClick(now)
-            return
-        }
+        val threshold = max(48f, 0.09f * resources.displayMetrics.widthPixels) / store.swipeSens
         if (dist >= threshold) {
             val dir = if (abs(sumX) >= abs(sumY)) { if (sumX > 0) 3 else 2 } else { if (sumY < 0) 0 else 1 }
             engine.swipeDir(dir)

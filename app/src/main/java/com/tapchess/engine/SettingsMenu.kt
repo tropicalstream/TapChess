@@ -11,27 +11,23 @@ class SettingsItem(
 )
 
 /**
- * Settings overlay (double-tap to enter/exit) using the on-device proven
- * LATCHED stepper (FABLE_X3_STARTER_GUIDE gotcha #25): one swipe gesture = one
- * step, re-armed only after the accumulator settles or the gesture ends.
+ * Settings overlay (double-tap to enter/exit). Navigation is DISCRETE: one
+ * temple-pad swipe gesture = exactly one step, classified on finger-up by the
+ * Activity and delivered here via [onDir]. (The earlier continuous-accumulator
+ * latch felt laggy and finicky on the X3 pad — one-gesture-one-step is
+ * deterministic.) Up/down move the selection; left/right adjust the value.
+ *
+ * Binocular SBS lives at the very bottom by convention across the app suite —
+ * it's a display default you set once, not something you touch mid-session.
  */
 class SettingsMenu(private val engine: GameEngine, private val store: SettingsStore) {
     var selected = 0
     var confirmingReset = false
-    private var accX = 0f
-    private var accY = 0f
-    private var vLatched = false
-    private var hLatched = false
 
     private val partNames = arrayOf("Low", "Normal", "Ultra")
-    private val moveThreshold = 42f
-    private val moveRearm = 14f
-    private val adjustThreshold = 56f
-    private val adjustRearm = 18f
 
     fun onOpen() {
-        selected = 0; accX = 0f; accY = 0f
-        vLatched = false; hLatched = false
+        selected = 0
         confirmingReset = false
     }
 
@@ -73,41 +69,31 @@ class SettingsMenu(private val engine: GameEngine, private val store: SettingsSt
         SettingsItem("Frame Cap", { if (store.frameCap30) "30 fps" else "60 fps" }, adjust = {
             store.frameCap30 = !store.frameCap30; engine.host.applySettings()
         }),
-        SettingsItem("Binocular SBS", { if (store.sbs) "On" else "Off" }, adjust = {
-            store.sbs = !store.sbs; engine.host.applySettings()
-        }),
         SettingsItem("New Game", { "" }, activate = { engine.doubleTap(); engine.newGame() }),
         SettingsItem("Undo Move", { "" }, activate = { engine.doubleTap(); engine.undo() }),
         SettingsItem("Resign", { "" }, activate = { engine.doubleTap(); engine.resign() }),
         SettingsItem("Reset Stats", { if (confirmingReset) "tap again!" else "" }, activate = {
             if (confirmingReset) { store.resetStats(); confirmingReset = false } else confirmingReset = true
         }),
+        // Display default — kept at the bottom by suite convention.
+        SettingsItem("Binocular SBS", { if (store.sbs) "On" else "Off" }, adjust = {
+            store.sbs = !store.sbs; engine.host.applySettings()
+        }),
     )
 
-    fun swipe(dx: Float, dy: Float) {
-        accY += dy; accX += dx
-        if (vLatched && kotlin.math.abs(accY) <= moveRearm) { vLatched = false; accY = 0f }
-        if (!vLatched) {
-            when {
-                accY > moveThreshold -> { move(1); vLatched = true; accY = 0f }
-                accY < -moveThreshold -> { move(-1); vLatched = true; accY = 0f }
-            }
-        }
-        if (hLatched && kotlin.math.abs(accX) <= adjustRearm) { hLatched = false; accX = 0f }
-        if (!hLatched) {
-            when {
-                accX > adjustThreshold -> { adjust(1); hLatched = true; accX = 0f }
-                accX < -adjustThreshold -> { adjust(-1); hLatched = true; accX = 0f }
-            }
+    /** One discrete step from a single swipe gesture. dir: 0 up,1 down,2 left,3 right. */
+    fun onDir(dir: Int) {
+        when (dir) {
+            0 -> move(-1)
+            1 -> move(1)
+            2 -> adjust(-1)
+            3 -> adjust(1)
         }
     }
-
-    fun endSwipe() { accX = 0f; accY = 0f; vLatched = false; hLatched = false }
 
     private fun move(d: Int) {
         selected = (selected + d + items.size) % items.size
         confirmingReset = false
-        accX = 0f
         engine.host.sound(Audio.TICK)
     }
 

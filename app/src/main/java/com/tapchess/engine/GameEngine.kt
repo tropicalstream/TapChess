@@ -46,7 +46,23 @@ class GameEngine(val store: SettingsStore, val host: GameHost) {
     var lastTo = -1
         private set
 
+    // Opponent's most recent move, shown as a dotted trail on the player's turn.
+    var oppFrom = -1
+        private set
+    var oppTo = -1
+        private set
+
+    // Dwell-to-commit: the cursor must rest on the destination for [DWELL]
+    // seconds before a tap will move there — a guard against the X3 pad
+    // registering a finicky swipe as the wrong square.
+    var cursorSince = 0f
+        private set
+    val dwellProgress get() = ((time - cursorSince) / DWELL).coerceIn(0f, 1f)
+    val moveArmed get() = time - cursorSince >= DWELL
+
     var invalidMsg: String? = null
+        private set
+    var invalidIsHint = false
         private set
     var invalidT = 0f
     var statusMsg = ""
@@ -79,7 +95,6 @@ class GameEngine(val store: SettingsStore, val host: GameHost) {
     private var aiGen = 0
     @Volatile private var pendingMove: Move? = null
     @Volatile private var pendingGen = -1
-    private var menuSwipeAcc = 0f
 
     val flip get() = !humanWhite   // board drawn from the human's side
 
@@ -103,6 +118,8 @@ class GameEngine(val store: SettingsStore, val host: GameHost) {
             pendingMove = null
             history.add(board.clone())
             doMove(pm)
+            oppFrom = pm.from   // show the opponent's move as a dotted trail
+            oppTo = pm.to
             if (state == GameState.THINKING) state = GameState.PLAYING
         }
 
@@ -134,7 +151,11 @@ class GameEngine(val store: SettingsStore, val host: GameHost) {
             2 -> if (!flip) f-- else f++
             3 -> if (!flip) f++ else f--
         }
-        if (onBoard(f, r)) { cursor = sqOf(f, r); host.sound(Audio.TICK, 1.4f, 0.5f) }
+        if (onBoard(f, r)) {
+            cursor = sqOf(f, r)
+            cursorSince = time // restart the dwell timer on every hop
+            host.sound(Audio.TICK, 1.4f, 0.5f)
+        }
     }
 
     fun click() {
@@ -163,6 +184,13 @@ class GameEngine(val store: SettingsStore, val host: GameHost) {
         if (p != 0 && (p > 0) == humanWhite) { selectSquare(cursor); return }
         when (val out = board.classify(selected, cursor)) {
             is MoveOutcome.Legal -> {
+                // Legal, but require the cursor to have settled here first so a
+                // stray swipe can't fling a piece to the wrong square.
+                if (!moveArmed) {
+                    setHint("Rest on the square a moment, then tap to move.")
+                    host.sound(Audio.TICK, 0.9f, 0.6f)
+                    return
+                }
                 val m = out.moves[0]
                 if (m.flag == F_PROMO) {
                     promoFrom = selected; promoTo = cursor; promoIdx = 0
@@ -171,6 +199,7 @@ class GameEngine(val store: SettingsStore, val host: GameHost) {
                 } else applyHuman(m)
             }
             is MoveOutcome.Illegal -> {
+                // Illegal feedback is instant and informative (no dwell needed).
                 setInvalid(out.reason)
                 host.sound(Audio.ILLEGAL)
             }
@@ -181,6 +210,7 @@ class GameEngine(val store: SettingsStore, val host: GameHost) {
         selected = sq
         targets = HashSet(board.generateLegal().filter { it.from == sq }.map { it.to })
         invalidMsg = null
+        cursorSince = time // dwell starts fresh from the piece's own square
         host.sound(Audio.SELECT)
     }
 
@@ -200,6 +230,7 @@ class GameEngine(val store: SettingsStore, val host: GameHost) {
 
     private fun applyHuman(m: Move) {
         history.add(board.clone())
+        oppFrom = -1; oppTo = -1 // player has responded; clear the opponent trail
         deselect()
         doMove(m)
         if (state == GameState.PLAYING || state == GameState.PROMOTION) {
@@ -215,6 +246,7 @@ class GameEngine(val store: SettingsStore, val host: GameHost) {
         board = board.applied(m)
         lastFrom = m.from; lastTo = m.to
         cursor = m.to
+        cursorSince = time // fresh dwell required for the next move
         when {
             m.flag == F_CASTLE -> host.sound(Audio.CASTLE)
             capture -> {
@@ -279,9 +311,11 @@ class GameEngine(val store: SettingsStore, val host: GameHost) {
         history.clear()
         deselect()
         lastFrom = -1; lastTo = -1
+        oppFrom = -1; oppTo = -1
         checkSquare = -1
         statusMsg = ""; resultMsg = ""; invalidMsg = null
         cursor = if (humanWhite) 12 else 52
+        cursorSince = time
         particles.clear()
         speedOn = store.speedSeconds > 0
         whiteMs = store.speedSeconds * 1000L
@@ -318,6 +352,8 @@ class GameEngine(val store: SettingsStore, val host: GameHost) {
         }
         deselect()
         lastFrom = -1; lastTo = -1
+        oppFrom = -1; oppTo = -1
+        cursorSince = time
         resultMsg = ""
         state = GameState.PLAYING
         checkSquare = if (board.inCheck(board.whiteToMove())) board.kingSquare(board.whiteToMove()) else -1
@@ -348,9 +384,14 @@ class GameEngine(val store: SettingsStore, val host: GameHost) {
         }
     }
 
-    /** Discrete swipe token from the Activity: dir 0 up,1 down,2 left,3 right. */
+    /**
+     * One discrete swipe gesture from the Activity, classified on finger-up.
+     * dir: 0 up, 1 down, 2 left, 3 right. Every context — settings, menu,
+     * board, promotion — is one-gesture-one-step, so nothing accumulates or
+     * lags (the fix for the finicky settings navigation).
+     */
     fun swipeDir(dir: Int) {
-        if (settingsOpen) return
+        if (settingsOpen) { settingsMenu.onDir(dir); return }
         when (state) {
             GameState.PLAYING -> cursorMove(dir)
             GameState.PROMOTION -> if (dir == 2 || dir == 3) {
@@ -366,15 +407,6 @@ class GameEngine(val store: SettingsStore, val host: GameHost) {
         }
     }
 
-    /** Continuous deltas (settings overlay only) for the latched stepper. */
-    fun navSwipe(dx: Float, dy: Float) {
-        if (settingsOpen) settingsMenu.swipe(dx, dy)
-    }
-
-    fun endSwipe() {
-        if (settingsOpen) settingsMenu.endSwipe() else menuSwipeAcc = 0f
-    }
-
     fun onAppPause() {
         if ((state == GameState.PLAYING || state == GameState.THINKING) && !settingsOpen) {
             settingsOpen = true
@@ -384,7 +416,14 @@ class GameEngine(val store: SettingsStore, val host: GameHost) {
 
     private fun setInvalid(msg: String) {
         invalidMsg = msg
+        invalidIsHint = false
         invalidT = 2.6f
+    }
+
+    private fun setHint(msg: String) {
+        invalidMsg = msg
+        invalidIsHint = true
+        invalidT = 1.6f
     }
 
     // --------------------------------------------------- board geometry
@@ -393,6 +432,7 @@ class GameEngine(val store: SettingsStore, val host: GameHost) {
         const val BOARD_X = 144f
         const val BOARD_Y = 64f
         const val SQ = 44f
+        const val DWELL = 2f // seconds the cursor must rest before a move commits
     }
 
     /** Screen column/row (0..7, row 0 = top) for a board square, honoring flip. */
