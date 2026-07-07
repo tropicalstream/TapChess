@@ -100,7 +100,65 @@ class GameEngine(val store: SettingsStore, val host: GameHost) {
 
     fun boot() {
         menuDiff = store.difficulty
+        val saved = store.savedGame
+        if (saved != null && runCatching { resume(saved) }.getOrDefault(false)) return
         toMenu()
+    }
+
+    // ------------------------------------------------------- persistence
+
+    /** Compact serialization of the in-progress game (survives an app exit). */
+    private fun serialize(): String {
+        val b = board
+        val sb = StringBuilder("1|")
+        sb.append(b.sq.joinToString(",")).append("|")
+        sb.append(b.side).append(",")
+            .append(b.castling.joinToString(",") { if (it) "1" else "0" }).append(",")
+            .append(b.epTarget).append(",").append(b.halfmove).append(",").append(b.fullmove).append("|")
+        sb.append(if (humanWhite) 1 else 0).append(",").append(difficulty.ordinal).append(",")
+            .append(if (speedOn) 1 else 0).append(",").append(whiteMs).append(",").append(blackMs).append("|")
+        sb.append(oppFrom).append(",").append(oppTo)
+        return sb.toString()
+    }
+
+    private fun resume(s: String): Boolean {
+        val parts = s.split("|")
+        if (parts.size < 5 || parts[0] != "1") return false
+        val sqs = parts[1].split(",").map { it.toInt() }
+        if (sqs.size != 64) return false
+        val b = Board()
+        for (i in 0 until 64) b.sq[i] = sqs[i]
+        val meta = parts[2].split(",")
+        b.side = meta[0].toInt()
+        for (i in 0 until 4) b.castling[i] = meta[1 + i] == "1"
+        b.epTarget = meta[5].toInt(); b.halfmove = meta[6].toInt(); b.fullmove = meta[7].toInt()
+        val cfg = parts[3].split(",")
+        humanWhite = cfg[0] == "1"
+        difficulty = Difficulty.from(cfg[1].toInt())
+        speedOn = cfg[2] == "1"
+        whiteMs = cfg[3].toLong(); blackMs = cfg[4].toLong()
+        val opp = parts[4].split(",")
+        oppFrom = opp[0].toInt(); oppTo = opp[1].toInt()
+
+        board = b
+        history.clear()
+        deselect()
+        lastFrom = -1; lastTo = -1
+        invalidMsg = null; resultMsg = ""
+        val stm = board.whiteToMove()
+        checkSquare = if (board.inCheck(stm)) board.kingSquare(stm) else -1
+        statusMsg = if (checkSquare >= 0) "Check!" else ""
+        cursor = board.kingSquare(humanWhite).let { if (it >= 0) it else if (humanWhite) 12 else 52 }
+        cursorSince = time
+        aiGen++
+        pendingMove = null
+        state = if (stm == humanWhite) GameState.PLAYING else GameState.THINKING
+        if (state == GameState.THINKING) requestAi()
+        return true
+    }
+
+    private fun persist() {
+        if (state == GameState.PLAYING || state == GameState.THINKING) store.savedGame = serialize()
     }
 
     // --------------------------------------------------------------- loop
@@ -120,7 +178,14 @@ class GameEngine(val store: SettingsStore, val host: GameHost) {
             doMove(pm)
             oppFrom = pm.from   // show the opponent's move as a dotted trail
             oppTo = pm.to
-            if (state == GameState.THINKING) state = GameState.PLAYING
+            if (state == GameState.THINKING) {
+                state = GameState.PLAYING
+                // Center the cursor on your king so each turn starts near the
+                // action (and right on the danger when you're in check).
+                cursor = board.kingSquare(humanWhite).let { if (it >= 0) it else cursor }
+                cursorSince = time
+            }
+            if (state != GameState.OVER) persist()
         }
 
         if (speedOn && (state == GameState.PLAYING || state == GameState.THINKING)) {
@@ -236,6 +301,7 @@ class GameEngine(val store: SettingsStore, val host: GameHost) {
         if (state == GameState.PLAYING || state == GameState.PROMOTION) {
             if (!isGameOver()) { state = GameState.THINKING; requestAi() }
         }
+        if (state != GameState.OVER) persist()
     }
 
     // --------------------------------------------------------------- move
@@ -282,6 +348,7 @@ class GameEngine(val store: SettingsStore, val host: GameHost) {
         statusMsg = ""
         state = GameState.OVER
         aiGen++ // cancel any pending AI
+        store.clearSavedGame() // finished games don't resume
         when (humanWon) {
             true -> { store.wins++; host.sound(Audio.WIN) }
             false -> { store.losses++; host.sound(Audio.LOSE) }
@@ -316,6 +383,7 @@ class GameEngine(val store: SettingsStore, val host: GameHost) {
         statusMsg = ""; resultMsg = ""; invalidMsg = null
         cursor = if (humanWhite) 12 else 52
         cursorSince = time
+        store.clearSavedGame() // fresh game; first move will persist anew
         particles.clear()
         speedOn = store.speedSeconds > 0
         whiteMs = store.speedSeconds * 1000L
@@ -408,6 +476,7 @@ class GameEngine(val store: SettingsStore, val host: GameHost) {
     }
 
     fun onAppPause() {
+        persist() // capture the game (and current clocks) in case we're killed
         if ((state == GameState.PLAYING || state == GameState.THINKING) && !settingsOpen) {
             settingsOpen = true
             settingsMenu.onOpen()

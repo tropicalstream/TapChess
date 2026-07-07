@@ -23,12 +23,14 @@ class SettingsItem(
 class SettingsMenu(private val engine: GameEngine, private val store: SettingsStore) {
     var selected = 0
     var confirmingReset = false
+    var confirmingResetSettings = false
 
     private val partNames = arrayOf("Low", "Normal", "Ultra")
 
     fun onOpen() {
         selected = 0
         confirmingReset = false
+        confirmingResetSettings = false
     }
 
     val items: List<SettingsItem> = listOf(
@@ -75,9 +77,14 @@ class SettingsMenu(private val engine: GameEngine, private val store: SettingsSt
         SettingsItem("Reset Stats", { if (confirmingReset) "tap again!" else "" }, activate = {
             if (confirmingReset) { store.resetStats(); confirmingReset = false } else confirmingReset = true
         }),
-        // Display default — kept at the bottom by suite convention.
-        SettingsItem("Binocular SBS", { if (store.sbs) "On" else "Off" }, adjust = {
-            store.sbs = !store.sbs; engine.host.applySettings()
+        // Kept at the bottom by suite convention.
+        SettingsItem("Reset Settings", { if (confirmingResetSettings) "tap again!" else "" }, activate = {
+            if (confirmingResetSettings) {
+                store.resetSettings()
+                engine.host.applySettings()
+                engine.menuDiff = store.difficulty
+                confirmingResetSettings = false
+            } else confirmingResetSettings = true
         }),
     )
 
@@ -94,6 +101,7 @@ class SettingsMenu(private val engine: GameEngine, private val store: SettingsSt
     private fun move(d: Int) {
         selected = (selected + d + items.size) % items.size
         confirmingReset = false
+        confirmingResetSettings = false
         engine.host.sound(Audio.TICK)
     }
 

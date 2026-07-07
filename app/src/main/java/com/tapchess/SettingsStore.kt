@@ -94,4 +94,22 @@ class SettingsStore(context: Context) {
         set(v) { p.edit().putInt("draws", v).apply() }
 
     fun resetStats() { p.edit().putInt("wins", 0).putInt("losses", 0).putInt("draws", 0).apply() }
+
+    /** Restore every preference to its default (keeps the W/L/D record and any saved game). */
+    fun resetSettings() {
+        p.edit()
+            .remove("difficulty").remove("playerWhite").remove("speed")
+            .remove("showLegal").remove("showCoords").remove("sndVol")
+            .remove("swipeSens").remove("flipV").remove("flipH").remove("safeTap")
+            .remove("particles").remove("cap30").remove("sbs")
+            .apply()
+    }
+
+    /** In-progress game, serialized by the engine so a game survives an exit. */
+    var savedGame: String?
+        get() = p.getString("savedGame", null)
+        set(v) { p.edit().apply { if (v == null) remove("savedGame") else putString("savedGame", v) }.apply() }
+
+    fun clearSavedGame() { p.edit().remove("savedGame").apply() }
 }
+
