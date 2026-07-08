@@ -16,22 +16,21 @@
         </aapt:attr>
     </path>
 
-    <!-- Knight silhouette -->
+    <!-- Knight: left-facing horse head with two ears and a scalloped mane -->
     <path android:strokeColor="#FF243A5E" android:strokeWidth="2" android:strokeLineJoin="round"
-        android:pathData="M40,86 L43,58 L34,50 L40,34 L57,24 L74,32 L80,58 L70,68 L74,86 Z">
+        android:pathData="M40,88 L44,74 L42,68 L30,69 L27,61 L34,53 L37,41 L45,34 L48,22 L54,33 L60,21 L65,34 L74,37 L68,46 L77,51 L70,62 L77,72 L72,88 Z">
         <aapt:attr name="android:fillColor">
             <gradient android:type="linear"
-                android:startX="40" android:startY="24" android:endX="74" android:endY="86">
+                android:startX="30" android:startY="22" android:endX="77" android:endY="88">
                 <item android:offset="0.0" android:color="#FFF2F6FF" />
                 <item android:offset="1.0" android:color="#FFB9C9E6" />
             </gradient>
         </aapt:attr>
     </path>
 
-    <!-- Eye + mane accent -->
-    <path android:fillColor="#FF1B2740" android:pathData="M60,38 a2.4,2.4 0 1,0 4.8,0 a2.4,2.4 0 1,0 -4.8,0" />
-    <path android:strokeColor="#8840C8FF" android:strokeWidth="2.4" android:fillColor="#00000000"
-        android:pathData="M56,28 L49,44 L58,52" />
+    <!-- Eye + nostril -->
+    <path android:fillColor="#FF1B2740" android:pathData="M44.6,46 a2.4,2.4 0 1,0 4.8,0 a2.4,2.4 0 1,0 -4.8,0" />
+    <path android:fillColor="#FF1B2740" android:pathData="M31,60 a1.4,1.4 0 1,0 2.8,0 a1.4,1.4 0 1,0 -2.8,0" />
 
     <!-- Base -->
     <path android:fillColor="#FFE8EEFB" android:pathData="M34,88h46v6h-46z" />

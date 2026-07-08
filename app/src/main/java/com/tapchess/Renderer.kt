@@ -236,16 +236,29 @@ class Renderer(private val engine: GameEngine, private val store: SettingsStore)
                 c.drawRect(rf, fill); c.drawRect(rf, stroke)
             }
             P.KNIGHT -> {
-                p.moveTo(cx - 0.32f * s, cy + 0.5f * s)
-                p.lineTo(cx - 0.28f * s, cy + 0.1f * s)
-                p.lineTo(cx - 0.40f * s, cy - 0.06f * s)
-                p.lineTo(cx - 0.30f * s, cy - 0.34f * s)
-                p.lineTo(cx - 0.05f * s, cy - 0.52f * s)
-                p.lineTo(cx + 0.28f * s, cy - 0.44f * s)
-                p.lineTo(cx + 0.42f * s, cy - 0.10f * s)
-                p.lineTo(cx + 0.22f * s, cy + 0.16f * s)
-                p.lineTo(cx + 0.30f * s, cy + 0.5f * s)
+                // Left-facing horse head: muzzle to the left, two pricked ears,
+                // a scalloped mane down the back of the neck, on a collar + base.
+                p.moveTo(cx - 0.34f * s, cy + 0.42f * s) // collar bottom-left (throat side)
+                p.lineTo(cx - 0.25f * s, cy + 0.22f * s) // throat
+                p.lineTo(cx - 0.30f * s, cy + 0.13f * s) // under-jaw
+                p.lineTo(cx - 0.47f * s, cy + 0.15f * s) // chin / lower lip
+                p.lineTo(cx - 0.50f * s, cy + 0.02f * s) // muzzle tip (nose)
+                p.lineTo(cx - 0.39f * s, cy - 0.07f * s) // nose bridge
+                p.lineTo(cx - 0.33f * s, cy - 0.23f * s) // brow
+                p.lineTo(cx - 0.19f * s, cy - 0.34f * s) // forelock base
+                p.lineTo(cx - 0.13f * s, cy - 0.53f * s) // front ear tip
+                p.lineTo(cx - 0.02f * s, cy - 0.36f * s) // notch between the ears
+                p.lineTo(cx + 0.09f * s, cy - 0.54f * s) // back ear tip
+                p.lineTo(cx + 0.17f * s, cy - 0.33f * s) // poll (top of head)
+                p.lineTo(cx + 0.31f * s, cy - 0.29f * s) // mane crest
+                p.lineTo(cx + 0.22f * s, cy - 0.14f * s) // mane notch
+                p.lineTo(cx + 0.37f * s, cy - 0.07f * s) // mane bump
+                p.lineTo(cx + 0.27f * s, cy + 0.09f * s) // mane notch
+                p.lineTo(cx + 0.37f * s, cy + 0.24f * s) // back of the neck
+                p.lineTo(cx + 0.34f * s, cy + 0.42f * s) // collar bottom-right
                 p.close()
+                rf.set(cx - 0.44f * s, cy + 0.42f * s, cx + 0.44f * s, cy + 0.56f * s)
+                c.drawRect(rf, fill); c.drawRect(rf, stroke)
             }
             P.BISHOP -> {
                 c.drawCircle(cx, cy - 0.36f * s, 0.12f * s, fill)
@@ -293,6 +306,12 @@ class Renderer(private val engine: GameEngine, private val store: SettingsStore)
         // Subtle top gloss.
         fill.color = Color.argb(60, 255, 255, 255)
         c.drawCircle(cx - 0.12f * s, cy - 0.18f * s, 0.08f * s, fill)
+        // Horse eye + nostril, drawn last so they stay crisp.
+        if (type == P.KNIGHT) {
+            fill.color = if (white) whiteRim else blackRim
+            c.drawCircle(cx - 0.11f * s, cy - 0.20f * s, 0.05f * s, fill)
+            c.drawCircle(cx - 0.40f * s, cy + 0.03f * s, 0.028f * s, fill)
+        }
     }
 
     private fun drawCrownDots(c: Canvas, cx: Float, cy: Float, s: Float, white: Boolean) {
